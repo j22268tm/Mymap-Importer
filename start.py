@@ -15,7 +15,7 @@ dotenv.load_dotenv()
 id = os.getenv("GOOGLE_EMAIL")
 password = os.getenv("GOOGLE_PASSWORD")
 url = os.getenv("MAP_URL")
-
+file = os.getenv("FILE_NAME")
 options = webdriver.ChromeOptions()
 # options.add_argument("--user-data-dir=/Users/korucha/Library/Application Support/Google/Chrome/Default")
 # options.add_argument("--profile-directory=Default")
