@@ -14,11 +14,11 @@ dotenv.load_dotenv()
 
 id = os.getenv("GOOGLE_EMAIL")
 password = os.getenv("GOOGLE_PASSWORD")
+url = os.getenv("MAP_URL")
 
 options = webdriver.ChromeOptions()
 # options.add_argument("--user-data-dir=/Users/korucha/Library/Application Support/Google/Chrome/Default")
 # options.add_argument("--profile-directory=Default")
-url = "https://www.google.com/maps/d/u/1/edit?mid=1SemidcwkRB58lVb-A3wnz3wLxF7yeWA" # このURLはアクセス権によります
 
 driver = webdriver.Chrome(options=options)
 driver.maximize_window() # 念のためウィンドウを最大化
