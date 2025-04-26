@@ -15,10 +15,11 @@ dotenv.load_dotenv()
 id = os.getenv("GOOGLE_EMAIL")
 password = os.getenv("GOOGLE_PASSWORD")
 url = os.getenv("MAP_URL")
-file = os.getenv("FILE_NAME")
+file_name = os.getenv("FILE_NAME")
 options = webdriver.ChromeOptions()
 # options.add_argument("--user-data-dir=/Users/korucha/Library/Application Support/Google/Chrome/Default")
 # options.add_argument("--profile-directory=Default")
+# options.add_argument("--headless") # iframeの操作が必要なため、headlessは使用不可
 
 driver = webdriver.Chrome(options=options)
 driver.maximize_window() # 念のためウィンドウを最大化
@@ -97,19 +98,63 @@ try:
         print("「Google ドライブ」ボタンをクリックしました。")
 
         # --- Google ドライブ内のファイル選択などの後続処理 ---
-        print("Google ドライブ内のファイルを選択する処理に進みます...")
-        # (ここにファイル選択などのコードを追加)
-        # 例: 特定のファイル名をクリック
-        # file_locator = (By.XPATH, "//div[@role='option' and contains(@aria-label, 'ファイル名')]")
-        # file_element = wait_long.until(EC.element_to_be_clickable(file_locator))
-        # file_element.click()
-        # print("ファイルをクリックしました。")
-        #
-        # # 選択ボタンをクリック
-        # select_button_locator = (By.XPATH, "//button[contains(text(), '選択')]") # ボタンのテキストは要確認
-        # select_button = wait_long.until(EC.element_to_be_clickable(select_button_locator))
-        # select_button.click()
-        # print("選択ボタンをクリックしました。")
+        print(f"Google ドライブ内のファイル '{file_name}' を選択する処理に進みます...")
+        try:
+            file_locator = (By.XPATH, f"//span[normalize-space()='{file_name}']/ancestor::div[@aria-labelledby][1]")
+            print(f"ロケータ: {file_locator} でファイル要素 '{file_name}' を待機します。")
+            # まず要素が表示されるまで待つ (visibility_of_element_located)
+            file_element_row = wait_long.until(EC.visibility_of_element_located(file_locator))
+            # 次にその要素がクリック可能になるまで待つ (element_to_be_clickable)
+            file_element_clickable = wait_long.until(EC.element_to_be_clickable(file_locator))
+
+            print(f"ファイル '{file_name}' が見つかり、クリック可能です。")
+            # クリックを実行
+            file_element_clickable.click()
+            # 代替クリック方法 (JavaScript Executor, クリックがうまくいかない場合に試す)
+            # driver.execute_script("arguments[0].click();", file_element_clickable)
+
+            print(f"ファイル '{file_name}' をクリックしました。")
+
+            # --- 選択ボタンをクリック ---
+            print("挿入ボタンを検索しています...")
+            # ボタンのテキストが'選択'であることを確認してください ('開く'などの場合もあります)
+            # normalize-space() でボタンテキスト前後の空白を無視します
+            insert_button_locator = (By.XPATH, "//button[.//span[normalize-space()='挿入']]")
+            insert_button = wait_long.until(EC.element_to_be_clickable(insert_button_locator))
+            print("挿入ボタンが見つかり、クリック可能です。")
+            try:
+                insert_button.click()
+            except Exception as click_err:
+                print(f"挿入ボタンの通常のクリックに失敗しました ({click_err})。JavaScriptでのクリックを試みます。")
+                driver.execute_script("arguments[0].click();", insert_button)
+            print("挿入ボタンをクリックしました。") # ログメッセージ修正
+
+            print("ファイルの選択・挿入処理が完了しました。")
+            print("ファイルインポート処理の完了を待機しています...")
+            # インポート完了の確認 (例: ダイアログが閉じる、レイヤーが追加されるなど)
+            # ここでは固定待機 (適切なEC条件に置き換えること)
+            time.sleep(10)
+            print("インポート処理が完了したと見なします。")
+        except Exception as file_select_exception:
+            print(f"ファイル選択処理中に予期せぬエラーが発生しました: {file_select_exception}")
+            driver.save_screenshot("file_select_unexpected_error.png")
+            raise # エラーを再発生させる
+
+        except:
+            print(f"エラー: ファイル '{file_name}' または選択ボタンが見つかりませんでした（タイムアウト）。")
+            # デバッグ情報としてiframe内のHTMLを出力
+            try:
+                # 現在のフレーム(Picker)のHTMLを取得
+                inner_html = driver.page_source
+                print(f"--- iframe ({iframe_locator}) 内のHTML (先頭1500文字) ---") # 少し長めに表示
+                print(inner_html[:1500])
+                print("-----------------------------")
+            except Exception as html_err:
+                print(f"フレーム内のHTML取得中にエラー: {html_err}")
+            driver.save_screenshot("file_select_timeout_error.png")
+            raise # エラーを再発生させ、finallyブロックで適切に終了させる
+
+
 
         time.sleep(5) # 処理完了を待つ (デバッグ用)
 
