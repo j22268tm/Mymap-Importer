@@ -1,3 +1,4 @@
+import traceback
 import selenium
 import dotenv
 import os
@@ -127,14 +128,168 @@ try:
             except Exception as click_err:
                 print(f"挿入ボタンの通常のクリックに失敗しました ({click_err})。JavaScriptでのクリックを試みます。")
                 driver.execute_script("arguments[0].click();", insert_button)
-            print("挿入ボタンをクリックしました。") # ログメッセージ修正
+            print("挿入ボタンをクリックしました。")
+            try:
+                # 挿入後、Picker iframe から抜ける処理を追加
+                print("Picker iframe からデフォルトコンテンツに戻ります...")
+                driver.switch_to.default_content()
+                print("デフォルトコンテンツに戻りました。")
 
-            print("ファイルの選択・挿入処理が完了しました。")
+            except Exception as click_err:
+                # ... (挿入ボタンクリックのエラー処理) ...
+                print(f"挿入ボタンのクリック中にエラーが発生しました: {click_err}")
+                # エラーが発生した場合でも、finallyブロックで default_content に戻る試みが行われる
+                raise # エラーを再発生させる
+
+            print("ファイルの選択・挿入処理が完了しました。") # このログは default_content に戻った後に出力される
             print("ファイルインポート処理の完了を待機しています...")
-            # インポート完了の確認 (例: ダイアログが閉じる、レイヤーが追加されるなど)
-            # ここでは固定待機 (適切なEC条件に置き換えること)
-            time.sleep(10)
-            print("インポート処理が完了したと見なします。")
+            # 次のステップ（続行ボタンの待機）に任せるため、ここでの長い固定待機は不要なことが多い
+            # time.sleep(10) # 削除または短縮を検討
+
+    # --- 5. チェックボックス確認・選択 & 「続行」ボタンクリック (位置情報カラム設定) ---
+            try:
+                print("位置情報カラムのチェックボックスを確認・選択します...")
+                # wait_long は iframe 特定・操作で使った WebDriverWait インスタンス (例: 20秒待機) を流用します
+                # wait_long = WebDriverWait(driver, 20) # 必要ならここで再定義
+
+                # チェックボックス処理を関数化しても良いが、ここでは直接記述
+                checkbox_labels = ['Latitude', 'Longitude']
+                for label in checkbox_labels:
+                    try:
+                        print(f"  チェックボックス「{label}」を探しています...")
+                        # ラベルテキスト(span)を探し、その前にある兄弟(span)の中のチェックボックス(span @role='checkbox')を特定
+                        checkbox_locator = (By.XPATH, f"//span[normalize-space()='{label}']/preceding-sibling::span//span[@role='checkbox']")
+                        # チェックボックス要素が表示され、クリック可能になるまで待機
+                        checkbox_element = wait_long.until(EC.visibility_of_element_located(checkbox_locator))
+                        checkbox_clickable = wait_long.until(EC.element_to_be_clickable(checkbox_locator))
+
+                        # 現在のチェック状態を取得 (aria-checked属性を確認)
+                        is_checked = checkbox_element.get_attribute('aria-checked') == 'true'
+                        print(f"  「{label}」の現在の状態: {'チェック済み' if is_checked else '未チェック'}")
+
+                        # もしチェックされていなければクリック
+                        if not is_checked:
+                            print(f"  「{label}」にチェックを入れます。")
+                            try:
+                                checkbox_clickable.click()
+                                # クリック後、状態が変わるのを少し待つ（必須ではない）
+                                # time.sleep(0.5)
+                                # is_checked_after = checkbox_element.get_attribute('aria-checked') == 'true'
+                                # print(f"  「{label}」クリック後の状態: {'チェック済み' if is_checked_after else '未チェック (クリック失敗?)'}")
+                            except Exception as chk_click_err:
+                                print(f"  「{label}」チェックボックスの通常のクリックに失敗 ({chk_click_err})。JavaScriptで試みます。")
+                                driver.execute_script("arguments[0].click();", checkbox_clickable)
+                                time.sleep(0.5) # JS実行後の反映を待つ
+                        else:
+                            print(f"  「{label}」は既にチェック済みのため、操作はスキップします。")
+
+                    except TimeoutException:
+                        print(f"エラー: チェックボックス「{label}」が見つかりませんでした（タイムアウト）。CSVのカラム名や画面構成を確認してください。")
+                        driver.save_screenshot(f"{label}_checkbox_timeout.png")
+                        raise # エラーを上位に伝播
+                    except Exception as chk_err:
+                        print(f"チェックボックス「{label}」の処理中にエラーが発生しました: {chk_err}")
+                        driver.save_screenshot(f"{label}_checkbox_error.png")
+                        raise # エラーを上位に伝播
+
+                # --- すべてのチェックボックス操作後、「続行」ボタンをクリック ---
+                print("「続行」ボタン (位置情報設定) を検索・待機しています...")
+                continue_button_locator = (By.XPATH, "//button[@name='location_step_ok' or normalize-space()='続行']")
+                continue_button = wait_long.until(EC.element_to_be_clickable(continue_button_locator))
+                print("「続行」ボタンが見つかりました。クリックします。")
+
+                try:
+                    continue_button.click()
+                except Exception as cont_click_err:
+                    print(f"続行ボタンの通常のクリックに失敗 ({cont_click_err})。JavaScriptで試みます。")
+                    driver.execute_script("arguments[0].click();", continue_button)
+
+                print("「続行」ボタンをクリックしました。")
+                print("タイトル列選択画面の表示を待っています...")
+                time.sleep(1) # 次画面の要素待機（より良いのは次の画面の要素を待つこと）
+
+            except TimeoutException as step5_timeout:
+                # チェックボックスまたは続行ボタンでタイムアウトした場合
+                print(f"エラー: 位置情報設定ステップで要素が見つかりませんでした（タイムアウト）。 {step5_timeout}")
+                # スクリーンショットは各箇所で撮っているのでここでは省略可
+                raise
+            except Exception as step5_err:
+                # チェックボックスまたは続行ボタンで予期せぬエラーが発生した場合
+                print(f"位置情報設定ステップで予期せぬエラーが発生しました: {step5_err}")
+                traceback.print_exc() # エラー詳細表示
+                # スクリーンショットは各箇所で撮っているのでここでは省略可
+                raise
+
+
+
+
+
+
+
+                # --- 6. 「Spot Name」ラジオボタンの選択 (マーカータイトル列設定) ---
+            try:
+                print("ラジオボタン「Spot Name」を検索・待機しています...")
+                # ラジオボタンの特定: role='radio' を持ち、内部のspanテキストが 'Spot Name' のものを探す (推奨)
+                radio_button_locator = (By.XPATH, f"//div[@role='radio'][.//span[normalize-space()='Spot Name']]")
+                # または data-value 属性を使う場合:
+                # radio_button_locator = (By.XPATH, "//div[@role='radio'][@data-value='Spot Name']")
+
+                radio_button = wait_long.until(EC.element_to_be_clickable(radio_button_locator))
+                print("ラジオボタン「Spot Name」が見つかりました。クリックします。")
+
+                # クリックを実行 (JavaScriptクリックが必要な場合もある)
+                try:
+                    radio_button.click()
+                except Exception as radio_click_err:
+                    print(f"ラジオボタンの通常のクリックに失敗 ({radio_click_err})。JavaScriptで試みます。")
+                    driver.execute_script("arguments[0].click();", radio_button)
+
+                print("ラジオボタン「Spot Name」をクリックしました。")
+                time.sleep(0.5) # クリック反映を少し待つ
+
+            except TimeoutException:
+                print("エラー: ラジオボタン「Spot Name」が見つかりませんでした（タイムアウト）。CSVのカラム名や画面構成を確認してください。")
+                driver.save_screenshot("radio_button_timeout.png")
+                raise
+            except Exception as radio_err:
+                print(f"ラジオボタン「Spot Name」のクリック中にエラーが発生しました: {radio_err}")
+                driver.save_screenshot("radio_button_error.png")
+                raise # エラーを再発生させる
+
+
+            # --- 7. 「完了」ボタンのクリック ---
+            try:
+                print("「完了」ボタン (タイトル設定完了) を検索・待機しています...")
+                # name属性 または テキスト '完了' でボタンを特定
+                finish_button_locator = (By.XPATH, "//button[@name='name_step_ok' or normalize-space()='完了']")
+                finish_button = wait_long.until(EC.element_to_be_clickable(finish_button_locator))
+                print("「完了」ボタンが見つかりました。クリックします。")
+
+                # クリックを実行
+                try:
+                    finish_button.click()
+                except Exception as finish_click_err:
+                    print(f"完了ボタンの通常のクリックに失敗 ({finish_click_err})。JavaScriptで試みます。")
+                    driver.execute_script("arguments[0].click();", finish_button)
+
+                print("「完了」ボタンをクリックしました。")
+                # これでインポートと設定の主要な自動操作は完了
+                print("インポートと設定が完了しました。")
+                # 完了後の状態確認や待機 (例: マップにデータが反映されるまで)
+                print("最終的なマップへの反映を待機します...")
+                time.sleep(5) # 必要に応じて適切な待機処理を追加
+
+            except TimeoutException:
+                print("エラー: 「完了」ボタンが見つかりませんでした（タイムアウト）。画面構成を確認してください。")
+                driver.save_screenshot("finish_button_timeout.png")
+                raise
+            except Exception as finish_err:
+                print(f"「完了」ボタンのクリック中にエラーが発生しました: {finish_err}")
+                driver.save_screenshot("finish_button_error.png")
+                raise
+
+
+
         except Exception as file_select_exception:
             print(f"ファイル選択処理中に予期せぬエラーが発生しました: {file_select_exception}")
             driver.save_screenshot("file_select_unexpected_error.png")
