@@ -13,14 +13,14 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 dotenv.load_dotenv()
 
+# timeoutの設定
+default_timeout = 20
+
 id = os.getenv("GOOGLE_EMAIL")
 password = os.getenv("GOOGLE_PASSWORD")
 url = os.getenv("MAP_URL")
 file_name = os.getenv("FILE_NAME")
 options = webdriver.ChromeOptions()
-# options.add_argument("--user-data-dir=/Users/korucha/Library/Application Support/Google/Chrome/Default")
-# options.add_argument("--profile-directory=Default")
-# options.add_argument("--headless") # iframeの操作が必要なため、headlessは使用不可
 
 driver = webdriver.Chrome(options=options)
 driver.maximize_window() # 念のためウィンドウを最大化
@@ -38,8 +38,6 @@ try:
     print("メールアドレスを入力しました。")
 
     password_input = wait.until(EC.visibility_of_element_located((By.XPATH, "//input[@type='password']")))
-    # パスワード入力フィールドが表示される前に少し待機が必要な場合がある
-    # time.sleep(1) # 短い固定待機 (デバッグ用)
     password_input.send_keys(password)
     password_input.send_keys(Keys.RETURN)
     print("パスワードを入力しました。")
@@ -55,9 +53,31 @@ try:
     optionElement.click()
     print("レイヤーオプションをクリックしました。")
 
+    # --- 置換処理の場合 ---
+    # 置換処理が必要ないパターン(初期インポート)
+    initial_layer_name = "無題のレイヤ"
+
+    print('既存レイヤーを確認します。')
+    check_layer_name = (By.XPATH,'//*[@id="ly0-layer-header"]/div[2]')
+
+    try:
+        layer_name_element = wait.until(EC.visibility_of_element_located(check_layer_name))
+        layer_name = layer_name_element.text
+        print(f"レイヤー名: {layer_name}")
+
+        if layer_name == initial_layer_name:
+            print("置換処理は不要です。")
+        else:
+            print("置換処理を実行します。")
+            # TODO: 置換処理のコードをここに追加
+            # 例: レイヤー名を変更する、既存のレイヤーを削除するなど
+    except TimeoutException:
+        print("レイヤー名の取得に失敗しました。レイヤーが存在しないか、XPathが変更された可能性があります。")
+        # スクリーンショットを撮るなどのデバッグ処理を追加
+        driver.save_screenshot("layer_name_error.png")
+        raise
     print("インポートボタンをクリックします...")
     # インポートボタンのXPathも変わりやすい可能性あり。テキストなどで指定できないか検討。
-    # 例: (By.XPATH, "//div[contains(text(), 'インポート')]")
     import_button_locator = (By.XPATH, '//*[@id=":1e"]/div') # :1e のようなIDは非常に不安定
     # より安定しそうなXPathの例 (テキストが'インポート'の場合)
     import_button_locator_alt = (By.XPATH, "//div[contains(@class, 'goog-menuitem') and contains(., 'インポート')]")
@@ -74,13 +94,7 @@ try:
 
     # --- Google Picker iframe の特定と切り替え ---
     print("Google Picker iframe を特定します...")
-    # ★★★ ここに、開発者ツールで確認した最も安定性の高いロケータを設定してください ★★★
-    # 例1: title属性を使う場合 (最も推奨)
-    # iframe_locator = (By.XPATH, "//iframe[@title='インポートするファイルの選択']") # 実際のtitle属性値に置き換えてください
-    # 例2: data-postorigin属性を使う場合
     iframe_locator = (By.XPATH, "//iframe[contains(@data-postorigin, '/picker?')]")
-    # 例3: 親要素からの相対パス (親要素の特定が必要)
-    # iframe_locator = (By.XPATH, "//div[@id='stable-parent-id']/iframe")
 
     # --- 1. 正しいiframeへの切り替え ---
     wait_long = WebDriverWait(driver, 20) # Picker読み込み用に長めの待機時間
@@ -111,8 +125,6 @@ try:
             print(f"ファイル '{file_name}' が見つかり、クリック可能です。")
             # クリックを実行
             file_element_clickable.click()
-            # 代替クリック方法 (JavaScript Executor, クリックがうまくいかない場合に試す)
-            # driver.execute_script("arguments[0].click();", file_element_clickable)
 
             print(f"ファイル '{file_name}' をクリックしました。")
 
@@ -144,13 +156,10 @@ try:
             print("ファイルの選択・挿入処理が完了しました。") # このログは default_content に戻った後に出力される
             print("ファイルインポート処理の完了を待機しています...")
             # 次のステップ（続行ボタンの待機）に任せるため、ここでの長い固定待機は不要なことが多い
-            # time.sleep(10) # 削除または短縮を検討
 
     # --- 5. チェックボックス確認・選択 & 「続行」ボタンクリック (位置情報カラム設定) ---
             try:
                 print("位置情報カラムのチェックボックスを確認・選択します...")
-                # wait_long は iframe 特定・操作で使った WebDriverWait インスタンス (例: 20秒待機) を流用します
-                # wait_long = WebDriverWait(driver, 20) # 必要ならここで再定義
 
                 # チェックボックス処理を関数化しても良いが、ここでは直接記述
                 checkbox_labels = ['Latitude', 'Longitude']
@@ -172,10 +181,7 @@ try:
                             print(f"  「{label}」にチェックを入れます。")
                             try:
                                 checkbox_clickable.click()
-                                # クリック後、状態が変わるのを少し待つ（必須ではない）
-                                # time.sleep(0.5)
-                                # is_checked_after = checkbox_element.get_attribute('aria-checked') == 'true'
-                                # print(f"  「{label}」クリック後の状態: {'チェック済み' if is_checked_after else '未チェック (クリック失敗?)'}")
+
                             except Exception as chk_click_err:
                                 print(f"  「{label}」チェックボックスの通常のクリックに失敗 ({chk_click_err})。JavaScriptで試みます。")
                                 driver.execute_script("arguments[0].click();", checkbox_clickable)
@@ -220,19 +226,11 @@ try:
                 # スクリーンショットは各箇所で撮っているのでここでは省略可
                 raise
 
-
-
-
-
-
-
                 # --- 6. 「Spot Name」ラジオボタンの選択 (マーカータイトル列設定) ---
             try:
                 print("ラジオボタン「Spot Name」を検索・待機しています...")
                 # ラジオボタンの特定: role='radio' を持ち、内部のspanテキストが 'Spot Name' のものを探す (推奨)
                 radio_button_locator = (By.XPATH, f"//div[@role='radio'][.//span[normalize-space()='Spot Name']]")
-                # または data-value 属性を使う場合:
-                # radio_button_locator = (By.XPATH, "//div[@role='radio'][@data-value='Spot Name']")
 
                 radio_button = wait_long.until(EC.element_to_be_clickable(radio_button_locator))
                 print("ラジオボタン「Spot Name」が見つかりました。クリックします。")
@@ -309,10 +307,7 @@ try:
             driver.save_screenshot("file_select_timeout_error.png")
             raise # エラーを再発生させ、finallyブロックで適切に終了させる
 
-
-
         time.sleep(5) # 処理完了を待つ (デバッグ用)
-
 
     except TimeoutException:
         print("エラー: フレーム内の「Google ドライブ」ボタン、または後続の要素が見つかりませんでした（タイムアウト）。")
