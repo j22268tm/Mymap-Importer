@@ -102,16 +102,21 @@ try:
 
     # --- 置換処理の場合のみ、メニュー項目「すべてのアイテムを置換」をクリック ---
     if not is_initial_import:
-        print("置換メニューから「すべてのアイテムを置換」を選択します...")
-        # 提供されたHTML要素からXPathを作成
+        # print("置換メニューから「すべてのアイテムを置換」を選択します...")
+        # # 提供されたHTML要素からXPathを作成
 
-        # TODO: ここのXPATH指定でコケる
-        replace_menu_item_locator = (By.XPATH, '/html/body/div[24]/div[1]/div')
+        # # TODO: ここのXPATH指定でコケる
+        delete_layer = (By.XPATH, '//*[@id=":1b"]/div')
         try:
             # メニュー項目が表示されるまで少し待つ
-            replace_menu_item = wait.until(EC.element_to_be_clickable(replace_menu_item_locator))
-            replace_menu_item.click()
+            delete_layer_item = wait.until(EC.element_to_be_clickable(delete_layer))
+            delete_layer_item.click()
             print("「すべてのアイテムを置換」を選択しました。")
+            time.sleep(2) # メニューが開くのを待つ
+            accept_delete = (By.XPATH, '//*[@id="confirm-delete-layer-dialog"]/div[3]/button[1]')
+            accept_delete_item = wait.until(EC.element_to_be_clickable(accept_delete))
+            accept_delete_item.click()
+
         except TimeoutException:
             print("エラー: 置換メニュー項目「すべてのアイテムを置換」が見つかりませんでした。")
             driver.save_screenshot("replace_menu_item_error.png")
@@ -120,6 +125,8 @@ try:
              print(f"置換メニュー項目のクリック中にエラー: {menu_err}")
              driver.save_screenshot("replace_menu_item_click_error.png")
              raise
+
+
 
 
 
@@ -200,7 +207,7 @@ try:
                     if not is_checked:
                         print(f"  「{label}」にチェックを入れます。")
                         checkbox_clickable.click()
-                        time.sleep(0.5)
+                        time.sleep(2)
                 except Exception as chk_err:
                      print(f"警告: チェックボックス「{label}」の処理でエラー: {chk_err}") # エラーでも続行する可能性考慮
 
